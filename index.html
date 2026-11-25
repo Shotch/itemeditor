@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Minecraft Item Formatter</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@melloware/coloris@0.24.0/dist/coloris.min.css">
+<script src="https://cdn.jsdelivr.net/npm/@melloware/coloris@0.24.0/dist/umd/coloris.min.js"></script>
+<style>
+  @font-face { font-family: Minecraft; src: url('Minecraft-Regular.ttf'); }
+  :root { color-scheme: dark; accent-color: #7c8cff; --line: 1px solid #34373f; scrollbar-gutter: stable; }
+  * { box-sizing: border-box; }
+  body { max-width: 1300px; margin: 0 auto; padding: 20px; background: #17181c; color: #ddd; font: 14px system-ui, sans-serif; }
+  main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px 24px; }
+  @media (min-width: 900px) {
+    main { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    section { grid-row: 2; }
+  }
+  h2 { margin: 0 0 6px; font: inherit; color: #8d919c; }
+
+  [contenteditable], #commands { background: #111216; border: var(--line); border-radius: 8px; font: 14px/1.6 'JetBrains Mono', monospace; font-variant-ligatures: none; white-space: pre-wrap; }
+  .toolbar { display: grid; gap: 8px; padding: 8px; background: #202227; border: var(--line); border-radius: 8px; }
+  .toolbar > div { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .toolbar label { margin: 0 6px; }
+
+  button { height: 30px; min-width: 30px; padding: 0 10px; font: inherit; color: inherit; background: none; border: 0; border-radius: 5px; cursor: pointer; }
+  button:hover { background: #363a43; }
+  button.on, #copy { background: #7c8cff; color: #101225; }
+  button.on:hover, #copy:hover { filter: brightness(1.1); }
+  .color { flex: 1; min-width: 34px; height: 30px; border: var(--line); border-radius: 5px; cursor: pointer; font-size: 0; }
+  #step { width: 60px; height: 30px; }
+
+  .field { position: relative; margin-bottom: 12px; }
+  [contenteditable] { padding: 10px 68px 10px 12px; outline: none; overflow-wrap: anywhere; }
+  [contenteditable]:focus { border-color: #7c8cff; }
+  [contenteditable] .k { background: #444; }
+  .empty::before { content: attr(data-placeholder); position: absolute; color: #666; pointer-events: none; }
+  #name { color: #fff; }
+  #lore { color: #aaa; min-height: 10lh; }
+  .counts { pointer-events: none; }
+  .counts div { position: absolute; right: 12px; font-size: 11px; line-height: 22px; color: #777; }
+  .counts .over { color: #f66; }
+
+  #preview { padding: 10px; background: #100010; border: 2px solid #28007f; border-radius: 4px; font: 16px/1.35 Minecraft, monospace; white-space: pre; overflow-x: auto; scrollbar-width: thin; }
+  #preview div { min-height: 1lh; }
+  #preview span { text-shadow: 2px 2px color-mix(in srgb, currentColor 25%, #000); }
+  #copy { margin: 12px 0; }
+  #commands { margin-top: 8px; padding: 12px; font-size: 12px; word-break: break-all; }
+  #commands div { padding-left: 2ch; text-indent: -2ch; }
+
+  .b { font-weight: bold; }
+  .i { font-style: italic; }
+  .u { text-decoration: underline; }
+  .s { text-decoration: line-through; }
+  .u.s { text-decoration: underline line-through; }
+</style>
+</head>
+<body>
+<main>
+  <div class="toolbar">
+    <div>
+      <button data-flag="b" title="Bold (Ctrl+B)"><b>B</b></button>
+      <button data-flag="i" title="Italic (Ctrl+I)"><i>I</i></button>
+      <button data-flag="u" title="Underline (Ctrl+U)"><u>U</u></button>
+      <button data-flag="s" title="Strikethrough"><s>S</s></button>
+      <button data-flag="k">Obfuscated</button>
+      <button id="reset" title="Remove formatting">Reset</button>
+      <input class="color" id="color" readonly title="Text color">
+    </div>
+    <div>
+      <button id="apply" title="Apply gradient">Gradient</button>
+      <input class="color" id="from" value="#ffb54d" readonly title="Gradient start">
+      <input class="color" id="to" value="#c74848" readonly title="Gradient end">
+      <label title="Characters that share each color">Step <input type="number" id="step" min="1" value="1"></label>
+      <label title="One color per word"><input type="checkbox" id="word"> Word</label>
+    </div>
+  </div>
+  <section>
+    <h2>Name</h2>
+    <div class="field">
+      <div id="name" contenteditable="plaintext-only" spellcheck="false" data-placeholder="Name"></div>
+      <div class="counts"></div>
+    </div>
+    <h2>Lore</h2>
+    <div class="field">
+      <div id="lore" contenteditable="plaintext-only" spellcheck="false" data-placeholder="Lore"></div>
+      <div class="counts"></div>
+    </div>
+    <button id="example">Example</button>
+    <button id="clear">Clear</button>
+  </section>
+  <section>
+    <h2>Preview</h2>
+    <div id="preview"></div>
+    <button id="copy">Copy Commands</button>
+    <details>
+      <summary>Show Commands</summary>
+      <div id="commands"></div>
+    </details>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const PALETTE = [
+  '#000000', '#0000aa', '#00aa00', '#00aaaa', '#aa0000', '#aa00aa', '#ffaa00', '#aaaaaa',
+  '#555555', '#5555ff', '#55ff55', '#55ffff', '#ff5555', '#ff55ff', '#ffff55', '#ffffff'
+];
+const DEFAULTS = { name: '#ffffff', lore: '#aaaaaa' };
+const CODES = { k: 'k', b: 'l', s: 'm', u: 'n', i: 'o' };
+const FLAGS = Object.keys(CODES);
+const LIMIT = 100;
+
+let docs = { name: [], lore: [] };
+let field = 'lore';
+let start = 0;
+let end = 0;
+let pending = null;
+let codes = [];
+let cmds = [];
+let undo = [];
+let redo = [];
+let lastEdit = 0;
+let copyTimer = null;
+
+const flagBtns = [...document.querySelectorAll('[data-flag]')];
+const colorInputs = [...document.querySelectorAll('.color')];
+
+const isHex = s => /^#[0-9a-f]{6}$/i.test(s);
+const sameFlags = (a, b) => FLAGS.every(f => !a[f] === !b[f]);
+
+function div(...children) {
+  const el = document.createElement('div');
+  el.append(...children);
+  return el;
+}
+
+function styled(text, style = {}) {
+  return text.split('').map(ch => ch === '\n' ? { ch } : { ...style, ch });
+}
+
+function styleNear(doc, pos) {
+  const prev = doc[pos - 1];
+  const ch = prev && prev.ch !== '\n' ? prev : doc[pos];
+  return ch && ch.ch !== '\n' ? ch : {};
+}
+
+function styleAt() {
+  if (pending) return pending;
+  const doc = docs[field];
+  return start < end ? (doc[start] || {}) : styleNear(doc, start);
+}
+
+function commit(next) {
+  const replaceAll = !Array.isArray(next);
+  if (replaceAll || Date.now() - lastEdit > 400) undo.push(docs);
+  lastEdit = replaceAll ? 0 : Date.now();
+  redo = [];
+  if (replaceAll) {
+    start = end = 0;
+    pending = null;
+    docs = next;
+  } else {
+    docs = { ...docs, [field]: next };
+  }
+  render();
+}
+
+function replace(from, to, text) {
+  const doc = docs[field];
+  const style = pending || styleNear(doc, from);
+  start = end = from + text.length;
+  pending = null;
+  commit([...doc.slice(0, from), ...styled(text, style), ...doc.slice(to)]);
+}
+
+function format(patch) {
+  if (start === end) {
+    pending = patch ? { ...styleAt(), ...patch } : {};
+    showStyle();
+    return;
+  }
+  commit(docs[field].map((c, i) => {
+    if (i < start || i >= end || c.ch === '\n') return c;
+    return patch ? { ...c, ...patch } : { ch: c.ch };
+  }));
+}
+
+function toggle(flag) {
+  format({ [flag]: !styleAt()[flag] });
+}
+
+function setColor(color) {
+  if (!isHex(color)) return;
+  format({ color: color.toLowerCase(), grad: undefined });
+}
+
+function readGradient() {
+  const from = $('from').value;
+  const to = $('to').value;
+  return {
+    from: isHex(from) ? from.toLowerCase() : '#ffffff',
+    to: isHex(to) ? to.toLowerCase() : '#ffffff',
+    step: Math.max(1, parseInt($('step').value, 10) || 1),
+    word: $('word').checked
+  };
+}
+
+function editGradient() {
+  const old = styleAt().grad;
+  if (!old) return showStyle();
+  const grad = readGradient();
+  if (pending) {
+    pending = { ...pending, grad };
+    return showStyle();
+  }
+  commit(docs[field].map(c => c.grad === old ? { ...c, grad } : c));
+}
+
+function restore(from, to) {
+  if (!from.length) return;
+  to.push(docs);
+  docs = from.pop();
+  lastEdit = 0;
+  start = end = Math.min(end, docs[field].length);
+  pending = null;
+  render();
+}
+
+function mix(from, to, t) {
+  let hex = '#';
+  for (const i of [1, 3, 5]) {
+    const a = parseInt(from.slice(i, i + 2), 16);
+    const b = parseInt(to.slice(i, i + 2), 16);
+    hex += Math.round(a + (b - a) * t).toString(16).padStart(2, '0');
+  }
+  return hex;
+}
+
+function layout(name, forOutput) {
+  const lines = [[]];
+  for (const c of docs[name]) {
+    if (c.ch === '\n') lines.push([]);
+    else lines.at(-1).push(c);
+  }
+  return lines.map(line => {
+    const first = line.findIndex(c => c.ch !== ' ');
+    if (first < 0) return forOutput ? [] : line;
+
+    // ItemEdit strips leading/repeated spaces; pad leading spaces with black underscores (&0_)
+    const pad = Array(first).fill({ ch: forOutput ? '_' : ' ', color: '#000000' });
+    let body = line.slice(first);
+    if (forOutput) {
+      // Collapse consecutive spaces and drop trailing spaces
+      body = body.filter((c, i) => c.ch !== ' ' || (i + 1 < body.length && body[i + 1].ch !== ' '));
+    }
+
+    for (let i = 0; i < body.length; ) {
+      const grad = body[i].grad;
+      if (!grad) {
+        body[i] = { ...body[i], color: body[i].color || DEFAULTS[name] };
+        i++;
+        continue;
+      }
+      let j = i + 1;
+      while (j < body.length && body[j].grad === grad) j++;
+
+      let n = -1;
+      let prevSpace = true;
+      const steps = [];
+      for (let k = i; k < j; k++) {
+        const isSpace = body[k].ch === ' ';
+        if (!isSpace && (!grad.word || prevSpace)) n++;
+        prevSpace = isSpace;
+        steps.push(Math.max(0, grad.word ? n : Math.floor(n / grad.step)));
+      }
+      const max = Math.max(steps.at(-1), 1);
+      for (let k = i; k < j; k++) {
+        body[k] = { ...body[k], color: mix(grad.from, grad.to, steps[k - i] / max) };
+      }
+      i = j;
+    }
+    return [...pad, ...body];
+  });
+}
+
+function spans(line) {
+  const out = [];
+  let last = null;
+  let key = '';
+  for (const c of line) {
+    const cls = FLAGS.filter(f => c[f]).join(' ');
+    const k = cls + '|' + (c.color || '');
+    if (k === key) {
+      last.textContent += c.ch;
+      continue;
+    }
+    key = k;
+    last = document.createElement('span');
+    last.className = cls;
+    if (c.color) last.style.color = c.color;
+    last.textContent = c.ch;
+    out.push(last);
+  }
+  return out;
+}
+
+function encode(line, defaultColor) {
+  let out = '';
+  let cur = { color: defaultColor };
+  for (const c of line) {
+    // Plain spaces don't need color changes unless underlined/struck or bold width changes
+    if (c.ch === ' ' && sameFlags(c, cur) && !c.u && !c.s) {
+      out += ' ';
+      continue;
+    }
+    const color = (c.color || defaultColor).toLowerCase();
+    const needsReset = color !== cur.color || FLAGS.some(f => cur[f] && !c[f]);
+    if (needsReset) {
+      const idx = PALETTE.indexOf(color);
+      if (color === defaultColor) out += '&r';
+      else if (idx >= 0) out += '&' + idx.toString(16);
+      else out += '&' + color.toUpperCase();
+      cur = {};
+    }
+    for (const f of FLAGS) {
+      if (c[f] && !cur[f]) out += '&' + CODES[f];
+    }
+    cur = { ...c, color };
+    out += c.ch;
+  }
+  return out;
+}
+
+function render() {
+  for (const id in docs) {
+    const parts = layout(id, false).flatMap((line, i) => i ? ['\n', ...spans(line)] : spans(line));
+    $(id).replaceChildren(...parts, document.createElement('br'));
+    $(id).classList.toggle('empty', !docs[id].length);
+  }
+  if (document.activeElement === $(field)) select();
+
+  const lines = [layout('name', true)[0], ...(docs.lore.length ? layout('lore', true) : [])];
+  codes = lines.map((line, i) => encode(line, DEFAULTS[i ? 'lore' : 'name']));
+  cmds = codes.map((code, i) => {
+    if (i === 0) return code ? '/itemedit name ' + code : '';
+    return '/itemedit lore ' + (code ? 'add ' + code : 'blank');
+  }).filter(Boolean);
+
+  $('preview').replaceChildren(...lines.map(line => div(...spans(line))));
+  $('commands').replaceChildren(...cmds.map(c => div(c)));
+  showCounts();
+  showStyle();
+}
+
+function showCounts() {
+  for (const id in docs) {
+    const el = $(id);
+    const baseTop = el.getBoundingClientRect().top;
+    let pos = 0;
+    const badges = [];
+    for (const [i, line] of el.textContent.split('\n').entries()) {
+      const at = pos;
+      pos += line.length + 1;
+      const code = codes[id === 'name' ? 0 : i + 1];
+      if (!code) continue;
+      const box = [...rangeIn(el, at, at + 1).getClientRects()].at(-1);
+      if (!box) continue;
+      const badge = div(`${code.length}/${LIMIT}`);
+      if (code.length > LIMIT) badge.className = 'over';
+      badge.style.top = `${box.top + box.height / 2 - 11 - baseTop}px`;
+      badges.push(badge);
+    }
+    el.nextElementSibling.replaceChildren(...badges);
+  }
+}
+
+function showStyle() {
+  const style = styleAt();
+  for (const btn of flagBtns) btn.classList.toggle('on', !!style[btn.dataset.flag]);
+  $('color').value = style.color || DEFAULTS[field];
+  if (style.grad) {
+    $('from').value = style.grad.from;
+    $('to').value = style.grad.to;
+    $('word').checked = style.grad.word;
+    if (document.activeElement !== $('step')) $('step').value = style.grad.step;
+  }
+  $('step').disabled = $('word').checked;
+  for (const el of colorInputs) el.style.background = el.value;
+}
+
+function offset(el, node, pos) {
+  const r = document.createRange();
+  r.setStart(el, 0);
+  r.setEnd(node, pos);
+  return r.toString().length;
+}
+
+function point(el, pos) {
+  const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  for (let n; (n = walk.nextNode()); pos -= n.length) {
+    if (pos <= n.length) return [n, pos];
+  }
+  return [el, 0];
+}
+
+function rangeIn(el, from, to) {
+  const r = document.createRange();
+  r.setStart(...point(el, from));
+  r.setEnd(...point(el, to));
+  return r;
+}
+
+function select() {
+  getSelection().setBaseAndExtent(...point($(field), start), ...point($(field), end));
+}
+
+function readSelection() {
+  const el = document.activeElement;
+  const sel = getSelection();
+  if (!el || !docs[el.id] || !sel.rangeCount) return;
+  const r = sel.getRangeAt(0);
+  if (!el.contains(r.commonAncestorContainer)) return;
+  const a = offset(el, r.startContainer, r.startOffset);
+  const b = a + r.toString().length;
+  if (el.id === field && a === start && b === end) return;
+  field = el.id;
+  start = a;
+  end = b;
+  pending = null;
+  showStyle();
+}
+
+for (const id in docs) {
+  const el = $(id);
+  const clean = text => text.replace(id === 'name' ? /[\n\t\xa0]/g : /[\t\xa0]/g, ' ');
+
+  const insert = text => {
+    readSelection();
+    replace(start, end, clean(text.replace(/\r\n?/g, '\n')));
+  };
+
+  const sync = () => {
+    if (field !== id) pending = null;
+    field = id;
+    const text = clean(el.textContent);
+    const old = docs[field].map(c => c.ch).join('');
+    const sel = getSelection();
+    const caret = sel.focusNode && el.contains(sel.focusNode)
+      ? offset(el, sel.focusNode, sel.focusOffset)
+      : text.length;
+
+    let tail = 0;
+    let head = 0;
+    while (tail < Math.min(text.length - caret, old.length) && text.at(-1 - tail) === old.at(-1 - tail)) tail++;
+    while (head < Math.min(text.length, old.length) - tail && text[head] === old[head]) head++;
+    replace(head, old.length - tail, text.slice(head, text.length - tail));
+  };
+
+  el.onbeforeinput = e => {
+    if (!/Paragraph|LineBreak/.test(e.inputType)) return;
+    e.preventDefault();
+    if (id === 'lore') insert('\n');
+  };
+  el.oninput = e => { if (!e.isComposing) sync(); };
+  el.addEventListener('compositionend', sync);
+  el.onpaste = e => { e.preventDefault(); insert(e.clipboardData.getData('text/plain')); };
+  el.ondrop = e => e.preventDefault();
+  el.onkeydown = e => {
+    if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+    const key = e.key.toLowerCase();
+    if (/^[biu]$/.test(key) && !e.shiftKey) toggle(key);
+    else if (key === 'z' && !e.shiftKey) restore(undo, redo);
+    else if (key === 'y' || key === 'z') restore(redo, undo);
+    else return;
+    e.preventDefault();
+  };
+}
+
+document.addEventListener('selectionchange', readSelection);
+document.addEventListener('mousedown', e => {
+  if (e.target.closest('button, label:has([type=checkbox])')) e.preventDefault();
+});
+window.addEventListener('resize', showCounts);
+document.fonts.ready.then(showCounts);
+
+for (const btn of flagBtns) btn.onclick = () => toggle(btn.dataset.flag);
+$('reset').onclick = () => format(null);
+$('apply').onclick = () => format({ grad: readGradient() });
+$('color').oninput = () => setColor($('color').value);
+for (const id of ['from', 'to', 'step', 'word']) $(id).oninput = editGradient;
+
+window.Coloris?.({ el: '.color', wrap: false, theme: 'polaroid', themeMode: 'dark', alpha: false, swatches: PALETTE });
+for (const el of colorInputs) {
+  el.addEventListener('close', () => {
+    setTimeout(() => {
+      if (document.activeElement !== el && document.activeElement !== document.body) return;
+      const saved = { field, start, end, pending };
+      $(field).focus();
+      ({ field, start, end, pending } = saved);
+      select();
+    });
+  });
+}
+
+$('copy').onclick = async () => {
+  if (!cmds.length) return;
+  clearTimeout(copyTimer);
+  try {
+    await navigator.clipboard.writeText(cmds.join('\n'));
+    $('copy').textContent = 'Copied!';
+  } catch {
+    $('copy').textContent = 'Copy failed';
+  }
+  copyTimer = setTimeout(() => { $('copy').textContent = 'Copy Commands'; }, 1500);
+};
+
+$('clear').onclick = () => commit({ name: [], lore: [] });
+$('example').onclick = () => {
+  const grad = { from: '#ffd22b', to: '#d53600', step: 1, word: false };
+  commit({
+    name: styled('Example Item', { b: true, grad: { from: '#ffb54d', to: '#c74848', step: 2, word: false } }),
+    lore: [
+      ['\nPlain, '], ['bold', { b: true }], [', '], ['italic', { i: true }], [', '], ['underline', { u: true }], [', '],
+      ['strike', { s: true }], [', '], ['obfuscated', { k: true }], ['\n\n'],
+      ['Minecraft color', { color: '#55ffff' }], [' and '], ['custom color', { color: '#4ea67e' }], ['\n'],
+      ['Gradient', { grad }], ['\n'],
+      ['Gradient by step', { grad: { ...grad, step: 3 } }], ['\n'],
+      ['Gradient by whole word', { grad: { ...grad, word: true } }], ['\n\n        Indented with spaces']
+    ].flatMap(([text, style]) => styled(text, style))
+  });
+};
+
+// Build equal-width ASCII pools so obfuscated (&k) text doesn't jitter horizontally
+document.fonts.load('16px Minecraft').then(() => {
+  const ctx = document.createElement('canvas').getContext('2d');
+  ctx.font = '16px Minecraft';
+  const pools = {};
+  const poolOf = {};
+  for (let code = 33; code <= 126; code++) {
+    const ch = String.fromCharCode(code);
+    const w = ctx.measureText(ch).width;
+    pools[w] ||= [];
+    pools[w].push(ch);
+    poolOf[ch] = pools[w];
+  }
+  setInterval(() => {
+    if (document.hidden) return;
+    for (const el of document.querySelectorAll('#preview .k')) {
+      el.textContent = el.textContent.replace(/./gu, ch => {
+        const pool = poolOf[ch];
+        return pool ? pool[Math.floor(Math.random() * pool.length)] : ch;
+      });
+    }
+  }, 65);
+});
+
+$('example').click();
+undo = [];
+</script>
+</body>
+</html>
