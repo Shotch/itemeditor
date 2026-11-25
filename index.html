@@ -41,6 +41,7 @@
   .counts { pointer-events: none; }
   .counts div { position: absolute; right: 12px; font-size: 11px; line-height: 22px; color: #777; }
   .counts .over { color: #f66; }
+  ::highlight(active) { background: #7c8cff44; }
 
   #preview { padding: 10px; background: #100010; border: 2px solid #28007f; border-radius: 4px; font: 16px/1.35 Minecraft, monospace; white-space: pre; overflow-x: auto; scrollbar-width: thin; }
   #preview div { min-height: 1lh; }
@@ -117,6 +118,7 @@ let field = 'lore';
 let start = 0;
 let end = 0;
 let pending = null;
+let showGroup = false;
 let codes = [];
 let cmds = [];
 let undo = [];
@@ -146,10 +148,27 @@ function styleNear(doc, pos) {
   return ch && ch.ch !== '\n' ? ch : {};
 }
 
+function activeGroup() {
+  if (!showGroup || pending || start < end) return null;
+  const doc = docs[field];
+  const hasColor = c => c && c.ch !== '\n' && (c.grad || c.color);
+  const idx = hasColor(doc[start - 1]) ? start - 1 : hasColor(doc[start]) ? start : -1;
+  if (idx < 0) return null;
+  const c = doc[idx];
+  const same = x => c.grad ? x.grad === c.grad : (!x.grad && x.color === c.color);
+  let from = idx;
+  let to = idx + 1;
+  while (from > 0 && same(doc[from - 1])) from--;
+  while (to < doc.length && same(doc[to])) to++;
+  return [from, to];
+}
+
 function styleAt() {
   if (pending) return pending;
   const doc = docs[field];
-  return start < end ? (doc[start] || {}) : styleNear(doc, start);
+  if (start < end) return doc[start] || {};
+  const group = activeGroup();
+  return group ? doc[group[0]] : styleNear(doc, start);
 }
 
 function commit(next) {
@@ -160,6 +179,7 @@ function commit(next) {
   if (replaceAll) {
     start = end = 0;
     pending = null;
+    showGroup = false;
     docs = next;
   } else {
     docs = { ...docs, [field]: next };
@@ -172,17 +192,18 @@ function replace(from, to, text) {
   const style = pending || styleNear(doc, from);
   start = end = from + text.length;
   pending = null;
+  showGroup = false;
   commit([...doc.slice(0, from), ...styled(text, style), ...doc.slice(to)]);
 }
 
-function format(patch) {
-  if (start === end) {
+function format(patch, range = start < end ? [start, end] : null) {
+  if (!range) {
     pending = patch ? { ...styleAt(), ...patch } : {};
     showStyle();
     return;
   }
   commit(docs[field].map((c, i) => {
-    if (i < start || i >= end || c.ch === '\n') return c;
+    if (i < range[0] || i >= range[1] || c.ch === '\n') return c;
     return patch ? { ...c, ...patch } : { ch: c.ch };
   }));
 }
@@ -193,7 +214,7 @@ function toggle(flag) {
 
 function setColor(color) {
   if (!isHex(color)) return;
-  format({ color: color.toLowerCase(), grad: undefined });
+  format({ color: color.toLowerCase(), grad: undefined }, start < end ? [start, end] : activeGroup());
 }
 
 function readGradient() {
@@ -225,6 +246,7 @@ function restore(from, to) {
   lastEdit = 0;
   start = end = Math.min(end, docs[field].length);
   pending = null;
+  showGroup = false;
   render();
 }
 
@@ -388,6 +410,10 @@ function showStyle() {
   }
   $('step').disabled = $('word').checked;
   for (const el of colorInputs) el.style.background = el.value;
+  if (window.Highlight) {
+    const range = activeGroup();
+    CSS.highlights.set('active', new Highlight(...(range ? [rangeIn($(field), ...range)] : [])));
+  }
 }
 
 function offset(el, node, pos) {
@@ -429,6 +455,7 @@ function readSelection() {
   start = a;
   end = b;
   pending = null;
+  showGroup = true;
   showStyle();
 }
 
@@ -465,6 +492,7 @@ for (const id in docs) {
   };
   el.oninput = e => { if (!e.isComposing) sync(); };
   el.addEventListener('compositionend', sync);
+  el.onclick = () => { showGroup = true; showStyle(); };
   el.onpaste = e => { e.preventDefault(); insert(e.clipboardData.getData('text/plain')); };
   el.ondrop = e => e.preventDefault();
   el.onkeydown = e => {
@@ -486,8 +514,8 @@ window.addEventListener('resize', showCounts);
 document.fonts.ready.then(showCounts);
 
 for (const btn of flagBtns) btn.onclick = () => toggle(btn.dataset.flag);
-$('reset').onclick = () => format(null);
-$('apply').onclick = () => format({ grad: readGradient() });
+$('reset').onclick = () => format(null, start < end ? [start, end] : activeGroup());
+$('apply').onclick = () => format({ grad: readGradient() }, start < end ? [start, end] : activeGroup());
 $('color').oninput = () => setColor($('color').value);
 for (const id of ['from', 'to', 'step', 'word']) $(id).oninput = editGradient;
 
@@ -496,9 +524,9 @@ for (const el of colorInputs) {
   el.addEventListener('close', () => {
     setTimeout(() => {
       if (document.activeElement !== el && document.activeElement !== document.body) return;
-      const saved = { field, start, end, pending };
+      const saved = { field, start, end, pending, showGroup };
       $(field).focus();
-      ({ field, start, end, pending } = saved);
+      ({ field, start, end, pending, showGroup } = saved);
       select();
     });
   });
