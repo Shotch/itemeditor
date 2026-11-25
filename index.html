@@ -8,13 +8,14 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@melloware/coloris@0.24.0/dist/coloris.min.css">
 <script src="https://cdn.jsdelivr.net/npm/@melloware/coloris@0.24.0/dist/umd/coloris.min.js"></script>
 <style>
-  @font-face { font-family: Minecraft; src: url('Minecraft-Regular.ttf'); }
+  @font-face { font-family: Minecraft; font-weight: 400; src: url('Minecraft-Regular.ttf'); }
+  @font-face { font-family: Minecraft; font-weight: 700; src: url('Minecraft-Bold.ttf'); }
   :root { color-scheme: dark; accent-color: #7c8cff; --line: 1px solid #34373f; scrollbar-gutter: stable; }
   * { box-sizing: border-box; }
-  body { max-width: 1300px; margin: 0 auto; padding: 20px; background: #17181c; color: #ddd; font: 14px system-ui, sans-serif; }
+  body { margin: 0 auto; padding: 20px; background: #17181c; color: #ddd; font: 14px system-ui, sans-serif; }
   main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px 24px; }
   @media (min-width: 900px) {
-    main { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    main { grid-template-columns: clamp(380px, 44%, 620px) minmax(0, 1fr); }
     section { grid-row: 2; }
   }
   h2 { margin: 0 0 6px; font: inherit; color: #8d919c; }
@@ -43,8 +44,8 @@
   .counts .over { color: #f66; }
   ::highlight(active) { background: #7c8cff44; }
 
-  #preview { padding: 10px; background: #100010; border: 2px solid #28007f; border-radius: 4px; font: 16px/1.35 Minecraft, monospace; white-space: pre; overflow-x: auto; scrollbar-width: thin; }
-  #preview div { min-height: 1lh; }
+  #preview { width: fit-content; min-width: min(100%, 600px); max-width: 100%; padding: 10px; background: #100010; border: 2px solid #28007f; border-radius: 4px; font: 16px/1.35 Minecraft, monospace; white-space: pre; overflow-x: auto; scrollbar-width: thin; }
+  #preview div { height: 1lh; line-height: 1lh; }
   #preview span { text-shadow: 2px 2px color-mix(in srgb, currentColor 25%, #000); }
   #copy { margin: 12px 0; }
   #commands { margin-top: 8px; padding: 12px; font-size: 12px; word-break: break-all; }
