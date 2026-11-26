@@ -271,8 +271,8 @@ function layout(name, forOutput) {
     const first = line.findIndex(c => c.ch !== ' ');
     if (first < 0) return forOutput ? [] : line;
 
-    // ItemEdit strips leading/repeated spaces; pad leading spaces with black underscores (&0_)
-    const pad = Array(first).fill({ ch: forOutput ? '_' : ' ', color: '#000000' });
+    // ItemEdit strips leading/repeated spaces; mark leading spaces so encode() emits "&0 " per space
+    const pad = Array(first).fill({ ch: ' ', color: '#000000', pad: true });
     let body = line.slice(first);
     if (forOutput) {
       // Collapse consecutive spaces and drop trailing spaces
@@ -333,6 +333,11 @@ function encode(line, defaultColor) {
   let out = '';
   let cur = { color: defaultColor };
   for (const c of line) {
+    if (c.pad) {
+      out += '&0 ';
+      cur = { color: '#000000' };
+      continue;
+    }
     // Plain spaces don't need color changes unless underlined/struck or bold width changes
     if (c.ch === ' ' && sameFlags(c, cur) && !c.u && !c.s) {
       out += ' ';
